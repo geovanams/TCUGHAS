@@ -1,6 +1,7 @@
 using System.Data.SqlClient;
 using System.Security.Cryptography;
 using System.Text;
+using System.IO;
 using Microsoft.AspNetCore.Mvc;
 using Newtonsoft.Json;
 
@@ -57,8 +58,34 @@ public class CatalogAdminController : ControllerBase
     [HttpGet("download")]
     public IActionResult Download([FromQuery] string file)
     {
+        if (string.IsNullOrWhiteSpace(file))
+        {
+            return BadRequest("Invalid file name.");
+        }
+
+        if (file != Path.GetFileName(file))
+        {
+            return BadRequest("Invalid file name.");
+        }
+
         var basePath = @"C:\eshop\uploads\";
-        var fullPath = basePath + file;
+        var normalizedBasePath = Path.GetFullPath(basePath);
+        if (!normalizedBasePath.EndsWith(Path.DirectorySeparatorChar))
+        {
+            normalizedBasePath += Path.DirectorySeparatorChar;
+        }
+
+        var fullPath = Path.GetFullPath(Path.Combine(normalizedBasePath, file));
+        if (!fullPath.StartsWith(normalizedBasePath, StringComparison.OrdinalIgnoreCase))
+        {
+            return BadRequest("Invalid file path.");
+        }
+
+        if (!System.IO.File.Exists(fullPath))
+        {
+            return NotFound();
+        }
+
         var bytes = System.IO.File.ReadAllBytes(fullPath);
         return File(bytes, "application/octet-stream", file);
     }
