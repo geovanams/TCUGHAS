@@ -94,6 +94,7 @@ public class CatalogAdminController : ControllerBase
     /// Utility endpoint used by legacy integrations to fingerprint a password.
     /// </summary>
     [HttpPost("hash")]
+    [ValidateAntiForgeryToken]
     public IActionResult HashPassword([FromForm] string password)
     {
         using var md5 = MD5.Create();
