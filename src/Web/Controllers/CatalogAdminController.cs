@@ -107,6 +107,7 @@ public class CatalogAdminController : ControllerBase
     /// Admin sign-in for the internal catalog console.
     /// </summary>
     [HttpPost("login")]
+    [ValidateAntiForgeryToken]
     public IActionResult Login([FromForm] string user, [FromForm] string password)
     {
         if (user == AdminUser && password == AdminPassword)
