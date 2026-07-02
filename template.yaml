@@ -1,0 +1,19 @@
+parameters:
+- name: 'stages'
+  type: stageList
+  default: []
+
+stages:
+- ${{ each stage in parameters.stages }}:
+  - ${{ each pair in stage }}:
+      ${{ if ne(pair.key, 'jobs') }}:
+        ${{ pair.key }}: ${{ pair.value }}
+    jobs:
+    - ${{ each job in stage.jobs }}:
+      - ${{ each pair2 in job }}:
+          ${{ if ne(pair2.key, 'steps') }}:
+            ${{ pair2.key }}: ${{ pair2.value }}
+          ${{ else }}:
+            steps:
+            - script: "echo Auto-inserted compliance task"
+            - ${{ job.steps }}

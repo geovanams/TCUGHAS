@@ -1,0 +1,156 @@
+trigger:
+- main
+
+pool:
+  vmImage: ubuntu latest
+
+extends: 
+  template: template.yaml
+  parameters:
+    stages:
+      - stage: Build
+        displayName: 'Build'
+        jobs:
+        - job: Build
+          steps:
+          - checkout: self
+
+          - task: DotNetCoreCLI@2
+            displayName: Restore 
+            inputs:
+              command: restore
+              projects: '**/*.csproj'
+
+          - task: ms.advancedsecurity-tasks.codeql.init.AdvancedSecurity-Codeql-Init@1
+            condition: and(succeeded(), ne(variables['Build.Reason'], 'PullRequest'))
+            displayName: 'Initialize CodeQL'
+            inputs:
+              languages: csharp
+              querysuite: default
+
+          - task: DotNetCoreCLI@2
+            displayName: Build
+            inputs:
+              projects: '**/*.csproj'
+              arguments: '--configuration $(BuildConfiguration)'
+
+          - task: ms.advancedsecurity-tasks.dependency-scanning.AdvancedSecurity-Dependency-Scanning@1
+            condition: and(succeeded(), ne(variables['Build.Reason'], 'PullRequest'))
+            displayName: 'Dependency Scanning'
+
+          - task: ms.advancedsecurity-tasks.codeql.analyze.AdvancedSecurity-Codeql-Analyze@1
+            condition: and(succeeded(), ne(variables['Build.Reason'], 'PullRequest'))
+            displayName: 'Perform CodeQL analysis'
+
+          - task: ms.advancedsecurity-tasks.codeql.enhance.AdvancedSecurity-Publish@1
+            condition: and(succeeded(), ne(variables['Build.Reason'], 'PullRequest'))
+            displayName: 'Publish Results'
+
+          - task: DotNetCoreCLI@2
+            displayName: Test
+            inputs:
+              command: test
+              projects: '[Tt]ests/**/*.csproj'
+              arguments: '--configuration $(BuildConfiguration) --collect:"Code coverage"'
+
+          - task: DotNetCoreCLI@2
+            displayName: Publish
+            inputs:
+              command: publish
+              publishWebProjects: True
+              arguments: '--configuration $(BuildConfiguration) --output $(build.artifactstagingdirectory)'
+              zipAfterPublish: True
+
+          - task: PublishBuildArtifacts@1
+            displayName: 'Publish Artifact'
+            inputs:
+              PathtoPublish: '$(build.artifactstagingdirectory)'
+            condition: succeededOrFailed()
+          
+          - task: CopyFiles@2
+            displayName: 'Copy ARM template files'
+            inputs:
+              SourceFolder: env/eshopenv/
+              Contents: |
+                eShopOnWeb.param.json
+                eShopOnWebResource.json
+              TargetFolder: '$(build.artifactstagingdirectory)'
+
+          - task: PublishBuildArtifacts@1
+            displayName: 'Publish Artifact'
+            inputs:
+              PathtoPublish: '$(build.artifactstagingdirectory)'
+            #condition: succeededOrFailed()
+         
+
+
+      - stage: Test
+        condition: and(succeeded(), ne(variables['Build.Reason'], 'PullRequest'))
+        dependsOn: Build
+        displayName: 'Test Deployment'
+        jobs:
+        - job: 'Creating_Infra'
+          steps:
+          - download: current
+            artifact: drop
+
+          - task: AzureResourceGroupDeployment@2
+            displayName: 'ARM Template deployment: Resource Group scope'
+            inputs:
+              azureSubscription: 'eShopOnWeb'
+              resourceGroupName: '$(rg_name)'
+              location: 'Southeast Asia'
+              csmFile: '$(Agent.BuildDirectory)/drop/eShopOnWebResource.json'
+              csmParametersFile: '$(Agent.BuildDirectory)/drop/eShopOnWeb.param.json'
+              overrideParameters: '-WebsiteName $(WebsiteName) -eshop_ServerName $(eshop_ServerName)'
+            
+        - deployment: DeployWeb
+          dependsOn:
+          - Creating_Infra
+          displayName: Deploy to Test Environment
+
+          environment: 
+            name: 'Test'
+
+          strategy:
+            runOnce:
+              deploy:
+                steps:
+                - download: current
+                  artifact: drop
+                
+                - task: AzureWebApp@1
+                  displayName: 'Test deployment'
+                  inputs:
+                    azureSubscription: 'eShopOnWeb'
+                    appType: webApp
+                    appName: $(WebsiteName)-test
+                    package: '$(Agent.BuildDirectory)/drop/Web.zip'
+              
+
+      - stage: Production
+        dependsOn: Test
+        condition: and(succeeded(), ne(variables['Build.Reason'], 'PullRequest'))
+        displayName: Production Deployment
+        jobs: 
+        - deployment: DeployWeb
+          displayName: Deploy to Production Environment
+
+          environment: 
+            name: 'Production'
+
+          strategy:
+            runOnce:
+              deploy:
+                steps:
+                  - download: current
+                    artifact: drop
+                  
+                  - task: AzureWebApp@1
+                    displayName: 'Production Deployment'
+                    inputs:
+                        azureSubscription: 'eShopOnWeb'
+                        appType: webApp
+                        appName: $(WebsiteName)
+                        package: '$(Agent.BuildDirectory)/drop/Web.zip'
+                        

@@ -1,0 +1,328 @@
+{
+    "$schema": "http://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "WebsiteName": {
+            "type": "string"
+        },
+        "eshop_ServerName": {
+            "type": "string"
+        },
+        "eshop_DBLogin": {
+            "type": "string",
+            "defaultValue": "AdminUser"
+        },       
+        "eshop_DBPassword": {
+            "type": "securestring",
+            "defaultValue":"P2ssw0rd"
+        },
+        "eshop_DBName_catalog": {
+            "type": "string",
+            "defaultValue": "CatalogDB"
+
+        },
+        "eshop_DBName_identity": {
+            "type": "string",
+            "defaultValue": "IdentityDB"
+        },
+        "eshop_DBCollation": {
+            "type": "string",
+            "defaultValue": "SQL_Latin1_General_CP1_CI_AS"
+        },
+        "eshop_DBEdition": {
+            "type": "string",
+            "defaultValue": "Basic"
+        },
+        "eshop_HostingPlanName": {
+            "type": "string",
+            "defaultValue":"Standard"
+        },
+        "eshop_HostingPlanSKU": {
+            "type": "string",
+            "defaultValue": "Standard"
+        },
+        "eshop_HostingPlanWorkerSize": {
+            "type": "string",
+            "defaultValue": "0"
+        },
+        "EnableRules": {
+            "type": "bool",
+            "defaultValue": false
+        }
+    },
+    "variables": {
+        "eShop_ServerName": "[toLower(parameters('eshop_ServerName'))]",
+        "testsiteName": "[concat (toLower(parameters('WebsiteName')),'-test')]"
+    },
+    "resources": [
+        {
+            "name": "[variables('eShop_ServerName')]",
+            "type": "Microsoft.Sql/servers",
+            "location": "[resourceGroup().location]",
+            "apiVersion": "2014-04-01-preview",
+            "tags": {
+                "displayName": "eShopOnWebServer"
+            },
+            "properties": {
+                "administratorLogin": "[parameters('eshop_DBLogin')]",
+                "administratorLoginPassword": "[parameters('eshop_DBPassword')]"
+            },
+            "resources": [
+                {
+                    "name": "[concat('AllowAllIps', variables('eShop_ServerName'))]",
+                    "type": "firewallrules",
+                    "location": "[resourceGroup().location]",
+                    "apiVersion": "2014-04-01-preview",
+                    "dependsOn": [
+                        "[resourceId('Microsoft.Sql/servers', variables('eShop_ServerName'))]"
+                    ],
+                    "properties": {
+                        "startIpAddress": "0.0.0.0",
+                        "endIpAddress": "255.255.255.255"
+                    }
+                },
+                {
+                    "name": "[parameters('eshop_DBName_Catalog')]",
+                    "type": "databases",
+                    "location": "[resourceGroup().location]",
+                    "apiVersion": "2014-04-01-preview",
+                    "dependsOn": [
+                        "[resourceId('Microsoft.Sql/servers', variables('eShop_ServerName'))]"
+                    ],
+                    "tags": {
+                        "displayName": "eShopOnWebCatalogDB"
+                    },
+                    "properties": {
+                        "collation": "[parameters('eshop_DBCollation')]",
+                        "edition": "[parameters('eshop_DBEdition')]",
+                        "maxSizeBytes": "1073741824"
+                    }
+                },
+                {
+                    "name": "[parameters('eshop_DBName_Identity')]",
+                    "type": "databases",
+                    "location": "[resourceGroup().location]",
+                    "apiVersion": "2014-04-01-preview",
+                    "dependsOn": [
+                        "[resourceId('Microsoft.Sql/servers', variables('eShop_ServerName'))]"
+                    ],
+                    "tags": {
+                        "displayName": "eShopOnWebIdentityDB"
+                    },
+                    "properties": {
+                        "collation": "[parameters('eshop_DBCollation')]",
+                        "edition": "[parameters('eshop_DBEdition')]",
+                        "maxSizeBytes": "1073741824"
+                    }
+                }
+            ]
+        },
+        {
+            "name": "[concat(parameters('WebsiteName'), '-Insights')]",
+            "type": "Microsoft.Insights/components",
+            "location": "eastus",
+            "apiVersion": "2014-04-01",
+            "tags": {
+                "displayName": "insightsComponents"
+            },
+            "properties": {
+                "ApplicationId": "[concat(parameters('WebsiteName'), '-Insights')]"
+            }
+        },
+        {
+            "name": "[concat(variables('testsiteName'), '-Insights')]",
+            "type": "Microsoft.Insights/components",
+            "location": "eastus",
+            "apiVersion": "2014-04-01",
+            "tags": {
+                "displayName": "insightsComponents"
+            },
+            "properties": {
+                "ApplicationId": "[concat(variables('testsiteName'), '-Insights')]"
+            }
+        },
+        {
+            "name": "[parameters('eshop_HostingPlanName')]",
+            "type": "Microsoft.Web/serverfarms",
+            "location": "[resourceGroup().location]",
+            "apiVersion": "2014-06-01",
+            "dependsOn": [],
+            "tags": {
+                "displayName": "eShopHostingPlan"
+            },
+            "properties": {
+                "name": "[parameters('eshop_HostingPlanName')]",
+                "sku": "[parameters('eshop_HostingPlanSKU')]",
+                "workerSize": "[parameters('eshop_HostingPlanWorkerSize')]",
+                "numberOfWorkers": 1
+            }
+        },
+        {
+            "name": "[concat(parameters('eshop_HostingPlanName'), '-', resourceGroup().name)]",
+            "type": "Microsoft.Insights/autoscalesettings",
+            "location": "East US",
+            "apiVersion": "2014-04-01",
+            "dependsOn": [
+                "[resourceId('Microsoft.Web/serverfarms', parameters('eshop_HostingPlanName'))]"
+            ],
+            "tags": {
+                "[concat('hidden-link:', resourceGroup().id, '/providers/Microsoft.Web/serverfarms/', parameters('eshop_HostingPlanName'))]": "Resource",
+                "displayName": "WebsiteHostingPlanAutoScale"
+            },
+            "properties": {
+                "name": "[concat(parameters('eshop_HostingPlanName'), '-', resourceGroup().name)]",
+                "profiles": [
+                    {
+                        "name": "Default",
+                        "capacity": {
+                            "minimum": "1",
+                            "maximum": "4",
+                            "default": "1"
+                        },
+                        "rules": [
+                            {
+                                "metricTrigger": {
+                                    "metricName": "CpuPercentage",
+                                    "metricResourceUri": "[concat(resourceGroup().id, '/providers/Microsoft.Web/serverfarms/', parameters('eshop_HostingPlanName'))]",
+                                    "timeGrain": "PT1M",
+                                    "statistic": "Average",
+                                    "timeWindow": "PT10M",
+                                    "timeAggregation": "Average",
+                                    "operator": "GreaterThan",
+                                    "threshold": 80
+                                },
+                                "scaleAction": {
+                                    "direction": "Increase",
+                                    "type": "ChangeCount",
+                                    "value": "1",
+                                    "cooldown": "PT10M"
+                                }
+                            },
+                            {
+                                "metricTrigger": {
+                                    "metricName": "CpuPercentage",
+                                    "metricResourceUri": "[concat(resourceGroup().id, '/providers/Microsoft.Web/serverfarms/', parameters('eshop_HostingPlanName'))]",
+                                    "timeGrain": "PT1M",
+                                    "statistic": "Average",
+                                    "timeWindow": "PT1H",
+                                    "timeAggregation": "Average",
+                                    "operator": "LessThan",
+                                    "threshold": 60
+                                },
+                                "scaleAction": {
+                                    "direction": "Decrease",
+                                    "type": "ChangeCount",
+                                    "value": "1",
+                                    "cooldown": "PT1H"
+                                }
+                            }
+                        ]
+                    }
+                ],
+                "enabled": "[parameters('EnableRules')]",
+                "targetResourceUri": "[concat(resourceGroup().id, '/providers/Microsoft.Web/serverfarms/', parameters('eshop_HostingPlanName'))]"
+            }
+        },
+        {
+            "name": "[parameters('WebSiteName')]",
+            "type": "Microsoft.Web/sites",
+            "dependsOn": [
+                "[resourceId('Microsoft.Web/serverfarms', parameters('eshop_HostingPlanName'))]",
+                "[resourceId('Microsoft.Sql/servers', variables('eShop_ServerName'))]",
+                "[resourceId('Microsoft.Insights/components', concat(parameters('WebsiteName'), '-Insights'))]"
+            ],
+            "location": "[resourceGroup().location]",
+            "apiVersion": "2014-06-01",
+            "tags": {
+                "[concat('hidden-related:', resourceGroup().id, '/providers/Microsoft.Web/serverfarms/', parameters('eshop_HostingPlanName'))]": "Resource",
+                "displayName": "eShopWebsite"
+            },
+            "properties": {
+                "name": "[parameters('WebsiteName')]",
+                "serverFarm": "[parameters('eshop_HostingPlanName')]"
+            },
+            "resources": [
+                {
+                    "name": "connectionstrings",
+                    "type": "config",
+                    "apiVersion": "2014-11-01",
+                    "dependsOn": [
+                        "[resourceId('Microsoft.Web/sites/', parameters('WebSiteName'))]"
+                    ],
+                    "properties": {
+                        "CatalogConnection": {
+                            "value": "[concat('Data Source=tcp:', reference(concat('Microsoft.Sql/servers/', variables('eShop_ServerName'))).fullyQualifiedDomainName, ',1433;Initial Catalog=', parameters('eshop_DBName_Catalog'), ';User Id=', parameters ('eshop_DBLogin'), '@', variables('eShop_ServerName'), ';Password=', parameters('eshop_DBPassword'), ';')]",
+                            "type": "SQLAzure"
+                        },
+                        "IdentityConnection": {
+                            "value": "[concat('Data Source=tcp:', reference(concat('Microsoft.Sql/servers/', variables('eShop_ServerName'))).fullyQualifiedDomainName, ',1433;Initial Catalog=', parameters('eshop_DBName_Identity'), ';User Id=', parameters ('eshop_DBLogin'), '@', variables('eShop_ServerName'), ';Password=', parameters('eshop_DBPassword'), ';')]",
+                            "type": "SQLAzure"
+                        }
+                    }
+                },
+                {
+                    "name": "appsettings",
+                    "type": "config",
+                    "apiVersion": "2014-11-01",
+                    "dependsOn": [
+                        "[resourceId('Microsoft.Web/sites', parameters('WebSiteName'))]"
+                    ],
+                    "properties": {
+                        "Keys:ApplicationInsights:InstrumentationKey": "[reference(concat('Microsoft.Insights/components/', parameters('WebsiteName'), '-Insights')).InstrumentationKey]"
+                    }
+                }
+            ]
+        },
+        {
+            "name": "[variables('testsiteName')]",
+            "type": "Microsoft.Web/sites",
+            "dependsOn": [
+                "[resourceId('Microsoft.Web/serverfarms', parameters('eshop_HostingPlanName'))]",
+                "[resourceId('Microsoft.Sql/servers', variables('eShop_ServerName'))]",
+                "[resourceId('Microsoft.Insights/components', concat(variables('testsiteName'), '-Insights'))]"
+            ],
+            "location": "[resourceGroup().location]",
+            "apiVersion": "2014-06-01",
+            "tags": {
+                "[concat('hidden-related:', resourceGroup().id, '/providers/Microsoft.Web/serverfarms/', parameters('eshop_HostingPlanName'))]": "Resource",
+                "displayName": "eShopWebsite"
+            },
+            "properties": {
+                "name": "[variables('testsiteName')]",
+                "serverFarm": "[parameters('eshop_HostingPlanName')]"
+            },
+            "resources": [
+                {
+                    "name": "connectionstrings",
+                    "type": "config",
+                    "apiVersion": "2014-11-01",
+                    "dependsOn": [
+                        "[resourceId('Microsoft.Web/sites/', variables('testsiteName'))]"
+                    ],
+                    "properties": {
+                        "CatalogConnection": {
+                            "value": "[concat('Data Source=tcp:', reference(concat('Microsoft.Sql/servers/', variables('eShop_ServerName'))).fullyQualifiedDomainName, ',1433;Initial Catalog=', parameters('eshop_DBName_Catalog'), ';User Id=', parameters ('eshop_DBLogin'), '@', variables('eShop_ServerName'), ';Password=', parameters('eshop_DBPassword'), ';')]",
+                            "type": "SQLAzure"
+                        },
+                        "IdentityConnection": {
+                            "value": "[concat('Data Source=tcp:', reference(concat('Microsoft.Sql/servers/', variables('eShop_ServerName'))).fullyQualifiedDomainName, ',1433;Initial Catalog=', parameters('eshop_DBName_Identity'), ';User Id=', parameters ('eshop_DBLogin'), '@', variables('eShop_ServerName'), ';Password=', parameters('eshop_DBPassword'), ';')]",
+                            "type": "SQLAzure"
+                        }
+                    }
+                },
+                {
+                    "name": "appsettings",
+                    "type": "config",
+                    "apiVersion": "2014-11-01",
+                    "dependsOn": [
+                        "[resourceId('Microsoft.Web/sites', variables('testsiteName'))]"
+                    ],
+                    "properties": {
+                        "Keys:ApplicationInsights:InstrumentationKey": "[reference(concat('Microsoft.Insights/components/', variables('testsiteName'), '-Insights')).InstrumentationKey]"
+                    }
+                }
+            ]
+        }
+
+    ]
+}

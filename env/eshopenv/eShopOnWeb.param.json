@@ -1,0 +1,42 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "WebsiteName": {
+      "value": null
+    },
+    "eshop_ServerName": {
+      "value": null
+    },
+    "eshop_DBLogin": {
+      "value": "AdminUser"
+    },
+    "eshop_DBPassword": {
+      "value": "P2ssw0rd"
+    },    
+    "eshop_DBName_catalog": {
+      "value": "CatalogDB"
+    },
+    "eshop_DBName_identity": {
+      "value": "IdentityDB"
+    },
+    "eshop_DBCollation": {
+      "value": "SQL_Latin1_General_CP1_CI_AS"
+    },
+    "eshop_DBEdition": {
+      "value": "Basic"
+    },
+    "eshop_HostingPlanName": {
+      "value": "eShopPlan"
+    },
+    "eshop_HostingPlanSKU": {
+      "value": "Standard"
+    },
+    "eshop_HostingPlanWorkerSize": {
+      "value": "0"
+    },
+    "EnableRules": {
+      "value": false
+    }
+  }
+}
